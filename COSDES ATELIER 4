@@ -1,0 +1,226 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Scanner;
+import java.time.LocalDateTime;
+
+public class ServiceMobileApp {
+    public static void main(String[] args) {
+        ServiceMobile service = new ServiceMobile();
+        Scanner scanner = new Scanner(System.in);
+
+        Compte compte1 = new Compte("C001", "0991234567", 500.0);
+        Compte compte2 = new Compte("C002", "0997654321", 100.0);
+        service.ajouterCompte(compte1);
+        service.ajouterCompte(compte2);
+
+        String numeroUtilisateur = "0991234567";
+        int choix = -1;
+
+        do {
+            System.out.println("\n*** SIMULATION VODACOM (*1111#) - Compte: " + numeroUtilisateur + " ***");
+            System.out.println("1. Consulter Solde");
+            System.out.println("2. Envoyer Argent");
+            System.out.println("3. Achat Crédit (Airtime)");
+            System.out.println("4. Supprimer Mon Compte");
+            System.out.println("0. Quitter");
+            System.out.print("Entrez votre choix : ");
+
+            if (scanner.hasNextInt()) {
+                choix = scanner.nextInt();
+            } else {
+                System.out.println("Choix invalide. Veuillez entrer un nombre.");
+                scanner.next();
+                continue;
+            }
+
+            scanner.nextLine();
+
+            switch (choix) {
+                case 1:
+                    service.trouverCompteParNumero(numeroUtilisateur).ifPresentOrElse(
+                            c -> System.out.printf("Votre solde actuel est : %.2f USD\n", c.getSolde()),
+                            () -> System.out.println("Compte non trouvé.")
+                    );
+                    break;
+
+                case 2:
+                    System.out.print("Numéro du destinataire : ");
+                    String numDest = scanner.nextLine();
+                    System.out.print("Montant à envoyer : ");
+                    double montantEnvoi = scanner.nextDouble();
+                    scanner.nextLine();
+
+                    if (service.trouverCompteParNumero(numDest).isPresent()) {
+                        Transaction transactionEnvoi = new EnvoiArgent("T" + System.currentTimeMillis(), montantEnvoi);
+                        service.executerTransaction(transactionEnvoi, numeroUtilisateur, numDest);
+                    } else {
+                        System.out.println("Destinataire introuvable dans le système.");
+                    }
+                    break;
+
+                case 3:
+                    System.out.print("Montant du crédit : ");
+                    double montantCredit = scanner.nextDouble();
+                    scanner.nextLine();
+
+                    Transaction transactionCredit = new AchatCredit("T" + System.currentTimeMillis(), montantCredit);
+                    service.executerTransaction(transactionCredit, numeroUtilisateur, numeroUtilisateur);
+                    break;
+
+                case 4:
+                    if (service.supprimerCompte(numeroUtilisateur)) {
+                        System.out.println("Compte " + numeroUtilisateur + " supprimé. Vous allez être déconnecté.");
+                        choix = 0;
+                    } else {
+                        System.out.println("Erreur lors de la suppression du compte.");
+                    }
+                    break;
+
+                case 0:
+                    System.out.println("Merci d'avoir utilisé le service.");
+                    break;
+
+                default:
+                    System.out.println("Option non reconnue. Veuillez réessayer.");
+            }
+        } while (choix != 0);
+
+        scanner.close();
+    }
+}
+
+class Compte {
+    private String numeroCompte;
+    private double solde;
+    private String numeroTelephone;
+
+    public Compte(String numeroCompte, String numeroTelephone, double soldeInitial) {
+        this.numeroCompte = numeroCompte;
+        this.numeroTelephone = numeroTelephone;
+        this.solde = soldeInitial;
+    }
+
+    public String getNumeroCompte() { return numeroCompte; }
+    public double getSolde() { return solde; }
+    public void setSolde(double solde) { this.solde = solde; }
+    public String getNumeroTelephone() { return numeroTelephone; }
+
+    public void deposer(double montant) {
+        if (montant > 0) {
+            solde += montant;
+        }
+    }
+
+    public boolean retirer(double montant) {
+        if (montant > 0 && solde >= montant) {
+            solde -= montant;
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
+class Transaction {
+    private String idTransaction;
+    private String type;
+    private double montant;
+    private String date;
+
+    public Transaction(String idTransaction, String type, double montant) {
+        this.idTransaction = idTransaction;
+        this.type = type;
+        this.montant = montant;
+        this.date = LocalDateTime.now().toString();
+    }
+
+    public String getIdTransaction() { return idTransaction; }
+    public String getType() { return type; }
+    public double getMontant() { return montant; }
+    public String getDate() { return date; }
+
+    public boolean executer(Compte compteSource, Compte compteDestinataire) {
+        System.out.println("Exécution de la transaction de type de base : " + this.type);
+        return false;
+    }
+}
+
+class EnvoiArgent extends Transaction {
+    public EnvoiArgent(String id, double montant) {
+        super(id, "ENVOI", montant);
+    }
+
+    @Override
+    public boolean executer(Compte compteSource, Compte compteDestinataire) {
+        if (compteSource.retirer(this.getMontant())) {
+            compteDestinataire.deposer(this.getMontant());
+            System.out.printf("Transfert réussi. %.2f USD de %s vers %s.\n",
+                    this.getMontant(), compteSource.getNumeroTelephone(), compteDestinataire.getNumeroTelephone());
+            System.out.printf("Nouveau solde %s : %.2f USD\n",
+                    compteSource.getNumeroTelephone(), compteSource.getSolde());
+            return true;
+        }
+        System.out.println("Erreur: Solde insuffisant pour le transfert.");
+        return false;
+    }
+}
+
+class AchatCredit extends Transaction {
+    public AchatCredit(String id, double montant) {
+        super(id, "CREDIT", montant);
+    }
+
+    @Override
+    public boolean executer(Compte compteSource, Compte compteDestinataire) {
+        if (compteSource.retirer(this.getMontant())) {
+            System.out.printf("Achat de crédit réussi. %.2f USD crédités sur %s.\n",
+                    this.getMontant(), compteDestinataire.getNumeroTelephone());
+            System.out.printf("Nouveau solde %s : %.2f USD\n",
+                    compteSource.getNumeroTelephone(), compteSource.getSolde());
+            return true;
+        }
+        System.out.println("Erreur: Solde insuffisant pour l'achat de crédit.");
+        return false;
+    }
+}
+
+class ServiceMobile {
+    private List<Compte> comptes;
+    private List<Transaction> historiqueTransactions;
+
+    public ServiceMobile() {
+        this.comptes = new ArrayList<>();
+        this.historiqueTransactions = new ArrayList<>();
+    }
+
+    public void ajouterCompte(Compte compte) {
+        this.comptes.add(compte);
+        System.out.println("[INFO] Compte créé pour le numéro " + compte.getNumeroTelephone());
+    }
+
+    public Optional<Compte> trouverCompteParNumero(String numeroTel) {
+        return comptes.stream()
+                .filter(c -> c.getNumeroTelephone().equals(numeroTel))
+                .findFirst();
+    }
+
+    public boolean executerTransaction(Transaction transaction, String numSource, String numDest) {
+        Optional<Compte> optSource = trouverCompteParNumero(numSource);
+        Optional<Compte> optDest = trouverCompteParNumero(numDest);
+
+        if (optSource.isPresent() && optDest.isPresent()) {
+            boolean reussite = transaction.executer(optSource.get(), optDest.get());
+            if (reussite) {
+                historiqueTransactions.add(transaction);
+            }
+            return reussite;
+        }
+        System.out.println("Erreur: Un ou les deux comptes sont introuvables.");
+        return false;
+    }
+
+    public boolean supprimerCompte(String numeroTel) {
+        return comptes.removeIf(c -> c.getNumeroTelephone().equals(numeroTel));
+    }
+}
